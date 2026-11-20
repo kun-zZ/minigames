@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reaction Time Test</title>
+<style>
+  /* ---------- Colors: one variable per game state, so they're easy to tweak ---------- */
+  :root {
+    --bg: #eef1f4;
+    --ink: #14213d;
+    --muted: #5b6678;
+    --idle: #14213d;   /* before you start */
+    --wait: #e63946;   /* red: wait */
+    --go: #2bd67b;     /* green: click now */
+    --early: #ffb703;  /* clicked too soon */
+    --result: #3a86ff; /* showing your time */
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px 40px;
+    gap: 20px;
+  }
+
+  h1 { margin: 0; font-size: 1.5rem; letter-spacing: -0.01em; }
+  .sub { margin: 4px 0 0; color: var(--muted); font-size: 0.95rem; }
+  header { text-align: center; }
+  .back { display: inline-block; margin-bottom: 8px; color: var(--muted); font-size: 0.95rem; text-decoration: none; }
+  .back:hover { color: var(--ink); text-decoration: underline; }
+
+  /* ---------- The big pad you click ---------- */
+  #pad {
+    width: min(100%, 640px);
+    height: min(55vh, 380px);
+    border: 0;
+    border-radius: 20px;
+    color: #fff;
+    background: var(--idle);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 16px;
+    font: inherit;
+    touch-action: manipulation;   /* removes the tap delay on phones */
+    user-select: none;
+    transition: background-color 0.12s;
+  }
+  #pad:focus-visible { outline: 4px solid var(--ink); outline-offset: 4px; }
+
+  /* The pad gets a class per game state; CSS does the color swap */
+  #pad.waiting { background: var(--wait); }
+  #pad.go      { background: var(--go); color: var(--ink); }
+  #pad.early   { background: var(--early); color: var(--ink); }
+  #pad.result  { background: var(--result); }
+
+  #big   { font-size: clamp(2.4rem, 9vw, 4.2rem); font-weight: 800; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  #small { font-size: 1.05rem; opacity: 0.9; }
+
+  /* ---------- Stats ---------- */
+  .stats {
+    width: min(100%, 640px);
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .stat { background: #fff; border-radius: 14px; padding: 14px; text-align: center; }
+  .stat b { display: block; font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+  .stat span { color: var(--muted); font-size: 0.85rem; }
+
+  /* ---------- Last 5 attempts as little bars ---------- */
+  .history {
+    width: min(100%, 640px);
+    background: #fff;
+    border-radius: 14px;
+    padding: 14px;
+  }
+  .history p { margin: 0 0 10px; color: var(--muted); font-size: 0.85rem; }
+  #bars { display: flex; align-items: flex-end; gap: 10px; height: 90px; }
+  .bar {
+    flex: 1;
+    background: var(--result);
+    border-radius: 8px 8px 0 0;
+    color: #fff;
+    font-size: 0.78rem;
+    text-align: center;
+    padding-top: 4px;
+    min-height: 22px;
+    font-variant-numeric: tabular-nums;
+  }
+  .empty { color: var(--muted); font-size: 0.9rem; align-self: center; }
+
+  #reset {
+    background: none;
+    border: 2px solid var(--ink);
+    color: var(--ink);
+    border-radius: 999px;
+    padding: 8px 18px;
+    font: inherit;
+    cursor: pointer;
+  }
+  #reset:hover { background: var(--ink); color: #fff; }
+
+  @media (prefers-reduced-motion: reduce) { #pad { transition: none; } }
+</style>
+</head>
+<body>
+
+<header>
+  <a class="back" href="../">‹ All games</a>
+  <h1>Reaction time test</h1>
+  <p class="sub">Wait for green, then click as fast as you can.</p>
+</header>
+
+<!-- The pad is a <button> so it works with keyboard (Space or Enter) too -->
+<button id="pad" type="button" aria-live="polite">
+  <div id="big">Click to start</div>
+  <div id="small">Or press Space</div>
+</button>
+
+<section class="stats">
+  <div class="stat"><b id="last">–</b><span>Last</span></div>
+  <div class="stat"><b id="best">–</b><span>Best</span></div>
+  <div class="stat"><b id="avg">–</b><span>Average of last 5</span></div>
+</section>
+
+<section class="history">
+  <p>Your last 5 tries (in milliseconds)</p>
+  <div id="bars"><span class="empty">Play a round to see your times here.</span></div>
+</section>
+
+<button id="reset" type="button">Reset scores</button>
+
+<script>
+  // ---------- 1. Grab the elements we need to update ----------
+  const pad = document.getElementById('pad');
+  const bigText = document.getElementById('big');
+  const smallText = document.getElementById('small');
+  const lastEl = document.getElementById('last');
+  const bestEl = document.getElementById('best');
+  const avgEl = document.getElementById('avg');
+  const barsEl = document.getElementById('bars');
+  const resetBtn = document.getElementById('reset');
+
+  // ---------- 2. Game state ----------
+  // state is one of: 'idle' | 'waiting' | 'go' | 'early' | 'result'
+  let state = 'idle';
+  let timeoutId = null;   // the random-delay timer
+  let startTime = 0;      // moment the pad turned green
+  let times = [];         // all reaction times this session
+  let best = null;        // best (lowest) time ever, saved in the browser
+
+  // Load the saved best time (wrapped in try/catch in case storage is blocked)
+  try {
+    const saved = localStorage.getItem('reactionBest');
+    if (saved) best = Number(saved);
+  } catch (e) {}
+
+  // ---------- 3. Helpers ----------
+  // Change the pad's look and text in one place
+  function setPad(newState, big, small) {
+    state = newState;
+    pad.className = newState === 'idle' ? '' : newState;
+    bigText.textContent = big;
+    smallText.textContent = small;
+  }
+
+  // A fun title based on your speed
+  function rankFor(ms) {
+    if (ms < 200) return 'Lightning';
+    if (ms < 250) return 'Sharp';
+    if (ms < 300) return 'Quick';
+    if (ms < 400) return 'Steady';
+    return 'Sleepy';
+  }
+
+  // ---------- 4. The game flow ----------
+  function startRound() {
+    setPad('waiting', 'Wait for green…', 'Don’t click yet');
+    // Random delay between 2 and 5 seconds
+    const delay = 2000 + Math.random() * 3000;
+    timeoutId = setTimeout(turnGreen, delay);
+  }
+
+  function turnGreen() {
+    setPad('go', 'Click!', '');
+    // performance.now() gives a precise timestamp in milliseconds
+    startTime = performance.now();
+  }
+
+  function clickedTooSoon() {
+    clearTimeout(timeoutId);   // cancel the pending "turn green"
+    setPad('early', 'Too soon!', 'Click to try again');
+  }
+
+  function recordResult() {
+    const ms = Math.round(performance.now() - startTime);
+    times.push(ms);
+
+    if (best === null || ms < best) {
+      best = ms;
+      try { localStorage.setItem('reactionBest', String(best)); } catch (e) {}
+    }
+
+    setPad('result', ms + ' ms', rankFor(ms) + ' · Click to go again');
+    updateStats();
+  }
+
+  // One handler decides what a click means, depending on the current state
+  function handlePress() {
+    if (state === 'idle' || state === 'early' || state === 'result') startRound();
+    else if (state === 'waiting') clickedTooSoon();
+    else if (state === 'go') recordResult();
+  }
+
+  // ---------- 5. Stats and the little bar chart ----------
+  function updateStats() {
+    const recent = times.slice(-5);
+    lastEl.textContent = recent.length ? recent[recent.length - 1] + ' ms' : '–';
+    bestEl.textContent = best !== null ? best + ' ms' : '–';
+    avgEl.textContent = recent.length
+      ? Math.round(recent.reduce((a, b) => a + b, 0) / recent.length) + ' ms'
+      : '–';
+
+    barsEl.innerHTML = '';
+    if (!recent.length) {
+      barsEl.innerHTML = '<span class="empty">Play a round to see your times here.</span>';
+      return;
+    }
+    recent.forEach(ms => {
+      const bar = document.createElement('div');
+      bar.className = 'bar';
+      // Taller bar = slower time. 600 ms fills the whole chart.
+      bar.style.height = Math.min(100, (ms / 600) * 100) + '%';
+      bar.textContent = ms;
+      barsEl.appendChild(bar);
+    });
+  }
+
+  // ---------- 6. Wire up the controls ----------
+  // pointerdown fires the instant you touch or click, which is more accurate than 'click'
+  pad.addEventListener('pointerdown', handlePress);
+
+  // Keyboard: Space or Enter. preventDefault stops the browser from also firing a click.
+  pad.addEventListener('keydown', e => {
+    if ((e.code === 'Space' || e.code === 'Enter') && !e.repeat) {
+      e.preventDefault();
+      handlePress();
+    }
+  });
+
+  resetBtn.addEventListener('click', () => {
+    clearTimeout(timeoutId);
+    times = [];
+    best = null;
+    try { localStorage.removeItem('reactionBest'); } catch (e) {}
+    setPad('idle', 'Click to start', 'Or press Space');
+    updateStats();
+  });
+
+  updateStats();
+</script>
+</body>
+</html>
