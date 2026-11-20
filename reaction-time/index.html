@@ -67,18 +67,20 @@
   #pad.result  { background: var(--result); }
 
   #big   { font-size: clamp(2.4rem, 9vw, 4.2rem); font-weight: 800; line-height: 1.05; font-variant-numeric: tabular-nums; }
-  #small { font-size: 1.05rem; opacity: 0.9; }
+  #small { font-size: 1.05rem; opacity: 0.9; white-space: pre-line; text-align: center; }
 
   /* ---------- Stats ---------- */
   .stats {
     width: min(100%, 640px);
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
     gap: 12px;
   }
   .stat { background: #fff; border-radius: 14px; padding: 14px; text-align: center; }
   .stat b { display: block; font-size: 1.6rem; font-variant-numeric: tabular-nums; }
   .stat span { color: var(--muted); font-size: 0.85rem; }
+
+  .note { width: min(100%, 640px); margin: -8px 0 0; color: var(--muted); font-size: 0.82rem; }
 
   /* ---------- Last 5 attempts as little bars ---------- */
   .history {
@@ -134,7 +136,10 @@
   <div class="stat"><b id="last">–</b><span>Last</span></div>
   <div class="stat"><b id="best">–</b><span>Best</span></div>
   <div class="stat"><b id="avg">–</b><span>Average of last 5</span></div>
+  <div class="stat"><b id="typical">–</b><span>Typical person</span></div>
 </section>
+
+<p class="note">Typical = the median click time on Human Benchmark’s reaction test (humanbenchmark.com), from millions of clicks. Screens and devices add their own delay, so compare loosely.</p>
 
 <section class="history">
   <p>Your last 5 tries (in milliseconds)</p>
@@ -153,6 +158,12 @@
   const avgEl = document.getElementById('avg');
   const barsEl = document.getElementById('bars');
   const resetBtn = document.getElementById('reset');
+  const typicalEl = document.getElementById('typical');
+
+  // Reference time: the median on Human Benchmark's reaction test.
+  // It's typed in by hand, so update this number if you want to refresh it.
+  const TYPICAL_MS = 273;
+  typicalEl.textContent = TYPICAL_MS + ' ms';
 
   // ---------- 2. Game state ----------
   // state is one of: 'idle' | 'waiting' | 'go' | 'early' | 'result'
@@ -186,6 +197,13 @@
     return 'Sleepy';
   }
 
+  // Compare a result with the typical time
+  function compareToTypical(ms) {
+    const diff = ms - TYPICAL_MS;
+    if (diff === 0) return 'Exactly typical';
+    return Math.abs(diff) + ' ms ' + (diff < 0 ? 'faster' : 'slower') + ' than typical';
+  }
+
   // ---------- 4. The game flow ----------
   function startRound() {
     setPad('waiting', 'Wait for green…', 'Don’t click yet');
@@ -214,7 +232,7 @@
       try { localStorage.setItem('reactionBest', String(best)); } catch (e) {}
     }
 
-    setPad('result', ms + ' ms', rankFor(ms) + ' · Click to go again');
+    setPad('result', ms + ' ms', rankFor(ms) + ' · ' + compareToTypical(ms) + '\nClick to go again');
     updateStats();
   }
 
