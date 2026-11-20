@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Little games</title>
+<style>
+  :root {
+    --bg: #f6f3ee;
+    --ink: #1d2433;
+    --muted: #667085;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    padding: 40px 16px 56px;
+  }
+
+  main { max-width: 900px; margin: 0 auto; }
+
+  h1 { margin: 0; font-size: clamp(2rem, 6vw, 3rem); letter-spacing: -0.02em; }
+  .intro { margin: 8px 0 32px; color: var(--muted); font-size: 1.05rem; max-width: 46ch; }
+
+  /* ---------- The grid: as many columns as fit, one column on a phone ---------- */
+  #grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
+  }
+
+  /* Each card gets its own color through the --c variable set in JS */
+  .card {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 170px;
+    padding: 20px;
+    border-radius: 18px;
+    background: var(--c);
+    color: #fff;
+    text-decoration: none;
+    transition: transform 0.15s;
+  }
+  a.card:hover { transform: translateY(-4px); }
+  a.card:focus-visible { outline: 4px solid var(--ink); outline-offset: 3px; }
+
+  .card h2 { margin: 0 0 6px; font-size: 1.35rem; }
+  .card p  { margin: 0; opacity: 0.92; line-height: 1.4; }
+  .card .tag { margin-top: 16px; font-weight: 700; }
+
+  /* Games that aren't built yet look faded and can't be clicked */
+  .card.soon { background: #e4e0d8; color: var(--muted); cursor: default; }
+
+  footer { margin-top: 40px; color: var(--muted); font-size: 0.9rem; }
+  footer a { color: inherit; }
+
+  @media (prefers-reduced-motion: reduce) { .card { transition: none; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Little games</h1>
+  <p class="intro">Quick games that run right in your browser. Works on phones too.</p>
+
+  <div id="grid"></div>
+
+  <footer>
+    <a href="https://kun-zz.github.io/">Back to my portfolio</a>
+  </footer>
+</main>
+
+<script>
+  // ---------- Add a new game by adding one line to this list ----------
+  // folder: the folder name of the game (must match the folder in the repo)
+  // ready:  true once the game exists, false shows a faded "Coming soon" card
+  const games = [
+    { title: 'Reaction time test', blurb: 'Wait for green, then click as fast as you can.', folder: 'reaction-time', color: '#2a9d6f', ready: true },
+    { title: 'Tic-tac-toe, with a twist', blurb: 'The old classic, made harder.', folder: 'tic-tac-toe-twist', color: '#e76f51', ready: false },
+    { title: '2048', blurb: 'Slide and merge the tiles.', folder: '2048', color: '#3a86ff', ready: false },
+  ];
+
+  // ---------- Build the cards ----------
+  const grid = document.getElementById('grid');
+
+  games.forEach(game => {
+    // Ready games are links; unfinished games are plain boxes
+    const card = document.createElement(game.ready ? 'a' : 'div');
+    card.className = 'card' + (game.ready ? '' : ' soon');
+    card.style.setProperty('--c', game.color);
+    if (game.ready) card.href = game.folder + '/';
+
+    card.innerHTML =
+      '<div><h2></h2><p></p></div>' +
+      '<div class="tag">' + (game.ready ? 'Play' : 'Coming soon') + '</div>';
+    card.querySelector('h2').textContent = game.title;
+    card.querySelector('p').textContent = game.blurb;
+
+    grid.appendChild(card);
+  });
+</script>
+</body>
+</html>
